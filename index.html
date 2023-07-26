@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+</head>
+<body>
+    <script>
+        const gameSettings = {
+            playerSpeed: 200,
+            maxSharks: 10,
+            maxKelp: 10,
+        };
+
+        class SceneSnorkel extends Phaser.Scene{
+            constructor() {
+                super({ key: "SceneSnorkel" });
+            }
+
+            preload() {
+                this.load.image('background', 'assets/sky.png');
+                this.load.spritesheet('diver', 'assets/diver.png', { frameWidth: 28.75, frameHeight: 30 });
+                this.load.spritesheet('shark', 'assets/shark.png', { frameWidth: 87, frameHeight: 60 });
+                this.load.spritesheet('kelp', 'assets/kelp.png', { frameWidth: 60, frameHeight: 60 });
+                this.load.spritesheet('bubble', 'assets/bubble.png', { frameWidth: 32, frameHeight: 39 });
+                this.load.image('fish_1', 'assets/fish_1.png');
+                this.load.image('fish_2', 'assets/fish_2.png');
+                this.load.image('fish_3', 'assets/fish_3.png');
+                this.load.image('fish_4', 'assets/fish_4.png');
+            }
+
+            create() {
+                let bg = this.add.sprite(0, 0, 'background').setScale(4);
+                bg.setOrigin(0, 0);
+                this.anims.create({
+                    key: 'pop',
+                    frames: this.anims.generateFrameNumbers('bubble', { start: 0, end: 5 }), // adjust end frame accordingly
+                    frameRate: 10,
+                    repeat: 0, // don't repeat
+                    hideOnComplete: true // hide bubble after animation completes
+                });
+                this.anims.create({
+                    key: 'swim',
+                    frames: this.anims.generateFrameNumbers('diver', { start: 0, end: 15 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                this.anims.create({
+                    key: 'shark_swim',
+                    frames: this.anims.generateFrameNumbers('shark', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                // kelp animation
+                this.anims.create({
+                    key: 'sway',
+                    frames: this.anims.generateFrameNumbers('kelp', { start: 0, end: 7 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                
+
+                this.startText = this.add.text(this.sys.game.config.width / 2, this.sys.game.config.height / 2, 'Spot all 4 fish!', { fontSize: '64px', fill: '#FFF' });
+                this.startText.setOrigin(0.5);  // Center the text
+                this.time.delayedCall(2000, function() {
+                    this.startText.destroy();
+                }, [], this);
+
+                this.fishes = this.add.group();
+                this.collectedFishTypes = new Set();
+
+                this.time.addEvent({
+                    delay: 5000,
+                    callback: function() {
+                        let fishType = Phaser.Math.Between(1, 4);
+                        let fish = this.physics.add.sprite(this.sys.game.config.width, Phaser.Math.Between(50, this.sys.game.config.height - 50), `fish_${fishType}`);
+                        fish.setVelocityX(-gameSettings.playerSpeed);
+                        this.tweens.add({
+                            targets: fish,
+                            y: '+=100',   // '+=100' means: increase y by 100
+                            duration: 2000,
+                            ease: 'Sine.easeInOut',
+                            yoyo: true,
+                            loop: -1
+                        });
+                        this.physics.add.overlap(this.diver, this.fishes, function(diver, fish) {
+                            var sizeBefore = this.collectedFishTypes.size;
+                            this.collectedFishTypes.add(fish.texture.key);
+                            if (this.collectedFishTypes.size > sizeBefore) {
+                                let displayFish = this.add.sprite(this.nextFishDisplayX, 30, fish.texture.key).setScale(2.5);
+                                this.nextFishDisplayX += displayFish.width + 10;  // space between fish
+                            }
+
+                            fish.destroy();
+                            if (this.collectedFishTypes.size == 4) {
+                                this.scene.start("SceneWin");
+                            }
+                        }, null, this);
+                        fish.setScale(2);
+                        this.fishes.add(fish);
+                    },
+                    callbackScope: this,
+                    loop: true
+                });
+
+                this.nextFishDisplayX = 30;
+
+
+                this.diver = this.physics.add.sprite(this.sys.game.config.width / 4, this.sys.game.config.height / 2, 'diver').play('swim');
+
+                this.diver.setScale(2, 2);
+                this.diver.setCollideWorldBounds(true);
+
+
+                this.cursorKeys = this.input.keyboard.createCursorKeys();
+
+                this.sharks = this.physics.add.group();
+                for(let i = 0; i < gameSettings.maxSharks; i++) {
+                    this.sharks.add(this.getShark());
+                }
+
+                this.kelps = this.physics.add.group();
+                for(let i = 0; i < gameSettings.maxKelp; i++) {
+                    this.kelps.add(this.getKelp());
+                }
+
+                this.time.addEvent({
+                    delay: 1000,
+                    callback: function() {
+                        let shark = this.getShark();
+                        if(shark) {
+                            shark.setActive(true);
+                            shark.setVisible(true);
+                            shark.x = this.sys.game.config.width;
+                            shark.y = Phaser.Math.Between(50, this.sys.game.config.height - 50);
+                            shark.setVelocityX(-gameSettings.playerSpeed);
+                        }
+                    },
+                    callbackScope: this,
+                    loop: true
+                });
+
+                // spawn kelp
+                this.time.addEvent({
+                    delay: 2000,
+                    callback: function() {
+                        let kelp = this.getKelp();
+                        if(kelp) {
+                            kelp.setActive(true);
+                            kelp.setVisible(true);
+                            kelp.x = this.sys.game.config.width;
+                            kelp.y = this.sys.game.config.height + Phaser.Math.Between(50, this.sys.game.config.height);
+                            kelp.setVelocityX(-gameSettings.playerSpeed);
+                        }
+                    },
+                    callbackScope: this,
+                    loop: true
+                });
+
+                this.time.addEvent({
+                    delay: 2000,
+                    callback: function() {
+                        let bubbleX = Phaser.Math.Between(0, this.sys.game.config.width);
+                        let bubbleY = Phaser.Math.Between(0, this.sys.game.config.height);
+                        let bubble = this.physics.add.sprite(bubbleX, bubbleY, 'bubble').setAlpha(0.5).play('pop');
+                        bubble.setScale(.25)
+                        bubble.setDepth(0);  // Render behind everything else
+                        // Bubbles will be destroyed automatically when their animation completes
+                    },
+                    callbackScope: this,
+                    loop: true
+                });
+
+                this.physics.add.overlap(this.diver, this.sharks, function() {
+                    this.scene.start("SceneGameOver");
+                }, null, this);
+            }
+
+            update() {
+                this.diver.setVelocity(0);
+
+                if (this.cursorKeys.up.isDown) {
+                    this.diver.setVelocityY(-gameSettings.playerSpeed);
+                }
+                if (this.cursorKeys.down.isDown) {
+                    this.diver.setVelocityY(gameSettings.playerSpeed);
+                }
+
+                // Adjust shark pooling
+                Phaser.Actions.Call(this.sharks.getChildren(), function(shark) {
+                    if (shark.x + shark.displayWidth < 0) {
+                        shark.setActive(false);
+                        shark.setVisible(false);
+                    }
+                }, this);
+
+                // Adjust kelp pooling
+                Phaser.Actions.Call(this.kelps.getChildren(), function(kelp) {
+                    if (kelp.x + kelp.displayWidth < 0) {
+                        kelp.setActive(false);
+                        kelp.setVisible(false);
+                    }
+                }, this);
+            }
+
+            getShark() {
+                let shark = this.sharks.getFirstDead();
+                if(!shark) {
+                    shark = this.physics.add.sprite(0,0, 'shark').play("shark_swim");
+                    shark.setActive(false);
+                    shark.setVisible(false);
+                    this.sharks.add(shark);
+                }
+                return shark;
+            }
+
+            getKelp() {
+                let kelp = this.kelps.getFirstDead();
+                if(!kelp) {
+                    let originalKelpHeight = 60; // replace this with your kelp sprite's original height
+                   
+                    kelp = this.physics.add.sprite(0, 0, 'kelp').setOrigin(0, 1).play('sway');
+                let scaleFactor = this.sys.game.config.height / originalKelpHeight;
+                kelp.setScale(Phaser.Math.Between(4, 8), scaleFactor);
+                kelp.setDepth(1);  // Render in front of everything else
+                kelp.setActive(false);
+                kelp.setVisible(false);
+                this.kelps.add(kelp);
+                }
+                return kelp;
+            }
+        }
+
+        class SceneMuseum extends Phaser.Scene {
+            constructor() {
+                super({ key: "SceneMuseum" });
+                this.dialogIsActive = false; 
+            }
+            preload() {
+                this.load.image("ground", 'tiles/Room_Builder_16x16.png')
+                this.load.image("interiors", 'tiles/Interiors_16x16.png')
+                this.load.tilemapTiledJSON("museum", "tiles/museum_big.json")
+                this.load.spritesheet('kirby', 'assets/kirby.png', { frameWidth: 21.1333, frameHeight: 24 });
+                this.load.spritesheet('speech', 'assets/speech_bubble.png', { frameWidth: 24, frameHeight: 16 });
+                this.load.image("roundedBox", "assets/dialog.png")
+            }
+            create() {
+                const map = this.make.tilemap({key : "museum"});
+                const room_builder_tileset = map.addTilesetImage("Room_Builder_16x16", "ground");
+                const interiors_tileset = map.addTilesetImage("Interiors_16x16", "interiors");
+                map.createStaticLayer("Ground", room_builder_tileset)
+                const wallsLayer = map.createStaticLayer("Walls", room_builder_tileset).setDepth(1)
+                wallsLayer.setCollisionByProperty({collides: true});
+                map.createStaticLayer("DoorwayWalls", room_builder_tileset).setDepth(1)
+                map.createStaticLayer("Doorway", room_builder_tileset).setDepth(1)
+                const artLayer = map.createStaticLayer("Art", interiors_tileset).setDepth(2)
+                artLayer.setCollisionByProperty({collides: true});
+                const guardsLayer = map.createStaticLayer("Guards", interiors_tileset)
+                guardsLayer.setCollisionByProperty({collides: true});
+                const guardsTwoLayer = map.createStaticLayer("GuardsTwo", interiors_tileset)
+                guardsTwoLayer.setCollisionByProperty({collides: true});
+                this.anims.create({
+                    key: 'right',
+                    frames: this.anims.generateFrameNumbers('kirby', { start: 0, end: 9 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                this.anims.create({
+                    key: 'up',
+                    frames: this.anims.generateFrameNumbers('kirby', { start: 10, end: 19 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                this.anims.create({
+                    key: 'left',
+                    frames: this.anims.generateFrameNumbers('kirby', { start: 20, end: 29 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                // Reusing right animation for down animation
+                this.anims.create({
+                    key: 'down',
+                    frames: this.anims.generateFrameNumbers('kirby', { start: 0, end: 9 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                this.anims.create({
+                    key: 'float',
+                    frames: this.anims.generateFrameNumbers('speech', { start: 0, end: 2 }),
+                    frameRate: 5,
+                    repeat: -1
+                });
+
+                // Add Kirby to the scene and place him in the bottom center
+                this.kirby = this.physics.add.sprite(this.sys.game.config.width / 2, this.sys.game.config.height - 24, 'kirby').setScale(1.2).setDepth(0);
+                this.physics.add.collider(this.kirby, wallsLayer);
+                this.physics.add.collider(this.kirby, artLayer);
+                this.physics.add.collider(this.kirby, guardsLayer);
+                this.physics.add.collider(this.kirby, guardsTwoLayer);                
+                // Enable keyboard input
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.question = this.physics.add.sprite(16*16, 10*16, 'speech').setScale(1.2).setDepth(4).play("float", true);
+
+                // Create an invisible object at the specific point
+                this.dialogTrigger = this.physics.add.image(15*16, 13*16, null);
+                this.dialogTrigger.setSize(1, 1);
+                this.dialogTrigger.setVisible(false);
+
+                // Check for a collision between Kirby and the invisible object
+                this.physics.add.overlap(this.kirby, this.dialogTrigger, this.showDialog, null, this);
+                // Create dialog box texture
+                this.dialogBox = this.add.image(15*16, 13*16, 'roundedBox').setScale(.25);  // use the image
+
+                this.dialogBoxText = this.add.text(15*16, 13*16, 'Relive memory? (Y/N)', { align: 'center', color: '#000000' }).setOrigin(0.5);
+                this.dialogBox.setDepth(3);
+                this.dialogBox.setVisible(false);
+                this.dialogBoxText.setVisible(false);
+                this.dialogBoxText.setDepth(3);
+                this.dialogBox.setPosition(this.cameras.main.centerX, this.cameras.main.centerY - 130);
+                this.dialogBoxText.setPosition(this.cameras.main.centerX, this.cameras.main.centerY- 130);
+                this.dialogBox.setScrollFactor(0);
+                this.dialogBoxText.setScrollFactor(0);
+                this.tweens.add({
+                    targets: [this.dialogBox, this.dialogBoxText],
+                    y: '+=5',
+                    duration: 800,
+                    ease: 'Sine.inOut',
+                    yoyo: true,
+                    repeat: -1
+                });
+
+
+                this.startText = this.add.text(this.sys.game.config.width / 2, this.sys.game.config.height / 2 + 100, 'Welcome to the Legion of Honor', { fontSize: '32px', fill: '#FFF' }).setDepth(5);
+                this.startText.setOrigin(0.5);  // Center the text
+                this.time.delayedCall(2000, function() {
+                    this.startText.destroy();
+                }, [], this);
+
+                this.cameras.main.startFollow(this.kirby);
+                this.cameras.main.setBounds(0, 0, this.physics.world.bounds.width, this.physics.world.bounds.height);
+                this.cameras.main.setZoom(2);
+                this.kirby.setCollideWorldBounds(true);
+
+            }
+
+            update() {
+                if (this.cursors.left.isDown) {
+                    this.kirby.setVelocityX(-160);
+                    this.kirby.anims.play('left', true);
+                } else if (this.cursors.right.isDown) {
+                    this.kirby.setVelocityX(160);
+                    this.kirby.anims.play('right', true);
+                } else if (this.cursors.up.isDown) {
+                    this.kirby.setVelocityY(-160);
+                    this.kirby.anims.play('up', true);
+                } else if (this.cursors.down.isDown) {
+                    this.kirby.setVelocityY(160);
+                    this.kirby.anims.play('down', true);
+                } else {
+                    this.kirby.setVelocityX(0);
+                    this.kirby.setVelocityY(0);
+                    this.kirby.anims.stop();
+                    this.kirby.setTexture('kirby', 4);  // set the frame back to 0
+                }
+                // Check for 'yes' or 'no' key presses when the dialog box is visible
+                if (this.dialogBox.visible) {
+                    if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey('Y'))) {
+                        this.scene.start('SceneSnorkel');
+                    } else if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey('N'))) {
+                        this.dialogBox.setVisible(false);
+                        this.dialogBoxText.setVisible(false);
+                        this.physics.resume();
+                        this.time.delayedCall(1000, function() {
+                            this.dialogIsActive = false;
+                        }, [], this);
+                        this.question.setVisible(true);
+                    }
+                }
+            }
+            showDialog() {
+                if (!this.dialogIsActive) {
+                    // Show the dialog box
+                    this.dialogBox.setVisible(true);
+                    this.dialogBoxText.setVisible(true);
+                    this.question.setVisible(false);
+                    // Pause the game
+                    this.physics.pause();
+                    this.dialogIsActive = true;
+                }
+            }
+        }
+
+
+        class SceneGameOver extends Phaser.Scene {
+            constructor() {
+                super({ key: "SceneGameOver" });
+            }
+
+            create() {
+                let centerX = this.cameras.main.centerX;
+                let centerY = this.cameras.main.centerY;
+                let text = this.add.text(centerX, centerY, "Game Over\n\nClick to restart", { align: 'center' });
+                text.setOrigin(0.5, 0.5);
+                this.input.on('pointerdown', function () {
+                    this.scene.start("SceneSnorkel");
+                }, this);
+            }
+        }
+
+        class SceneWin extends Phaser.Scene {
+            constructor() {
+                super({ key: "SceneWin" });
+            }
+
+            create() {
+                let centerX = this.cameras.main.centerX;
+                let centerY = this.cameras.main.centerY;
+                let text = this.add.text(centerX, centerY, "You Win!\n\nClick to restart", { align: 'center' });
+                text.setOrigin(0.5, 0.5);
+                this.input.on('pointerdown', function () {
+                    this.scene.start("SceneMain");
+                }, this);
+            }
+        }
+
+        const config = {
+            type: Phaser.AUTO,
+            width: 1120,
+            height: 960,
+            scene: [SceneMuseum, SceneSnorkel, SceneGameOver, SceneWin],
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    debug: false
+                }
+            },
+            pixelArt: true,
+            roundPixels: true,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+        };
+
+        let game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
