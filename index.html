@@ -247,16 +247,16 @@
                 const map = this.make.tilemap({key : "museum"});
                 const room_builder_tileset = map.addTilesetImage("Room_Builder_16x16", "ground");
                 const interiors_tileset = map.addTilesetImage("Interiors_16x16", "interiors");
-                map.createStaticLayer("Ground", room_builder_tileset)
+                map.createStaticLayer("Ground", room_builder_tileset).setDepth(0)
                 const wallsLayer = map.createStaticLayer("Walls", room_builder_tileset).setDepth(1)
                 wallsLayer.setCollisionByProperty({collides: true});
                 map.createStaticLayer("DoorwayWalls", room_builder_tileset).setDepth(1)
                 map.createStaticLayer("Doorway", room_builder_tileset).setDepth(1)
                 const artLayer = map.createStaticLayer("Art", interiors_tileset).setDepth(2)
                 artLayer.setCollisionByProperty({collides: true});
-                const guardsLayer = map.createStaticLayer("Guards", interiors_tileset)
+                const guardsLayer = map.createStaticLayer("Guards", interiors_tileset).setDepth(3)
                 guardsLayer.setCollisionByProperty({collides: true});
-                const guardsTwoLayer = map.createStaticLayer("GuardsTwo", interiors_tileset)
+                const guardsTwoLayer = map.createStaticLayer("GuardsTwo", interiors_tileset).setDepth(3)
                 guardsTwoLayer.setCollisionByProperty({collides: true});
                 this.anims.create({
                     key: 'right',
@@ -301,7 +301,7 @@
                 this.question = this.physics.add.sprite(16*16, 10*16, 'speech').setScale(1.2).setDepth(4).play("float", true);
 
                 // Create an invisible object at the specific point
-                this.dialogTrigger = this.physics.add.image(15*16, 13*16, null);
+                this.dialogTrigger = this.physics.add.image(15*16, 14*16, null);
                 this.dialogTrigger.setSize(1, 1);
                 this.dialogTrigger.setVisible(false);
 
